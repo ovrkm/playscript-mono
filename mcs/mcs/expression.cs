@@ -6587,9 +6587,18 @@ namespace Mono.CSharp
 				dynamic = false;
 			}
 
-			method = ConstructorLookup (ec, type, ref arguments, loc);
+			bool doDynamicDispatch;
+			if (ec.FileType == SourceFileType.PlayScript)
+			{
+				method = ConstructorLookup (ec, type, ref arguments, loc, true);
+				// if unable to resolve constructor at compile time then use dynamic invoke
+				doDynamicDispatch = (method == null);
+			} else {
+				method = ConstructorLookup (ec, type, ref arguments, loc);
+				doDynamicDispatch = dynamic;
+			}
 
-			if (dynamic) {
+			if (doDynamicDispatch) {
 				arguments.Insert (0, new Argument (new TypeOf (type, loc).Resolve (ec), Argument.AType.DynamicTypeName));
 				ret = new DynamicConstructorBinder (type, arguments, loc).Resolve (ec);
 			} else {

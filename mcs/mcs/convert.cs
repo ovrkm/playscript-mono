@@ -1514,16 +1514,20 @@ namespace Mono.CSharp {
 				}
 
 				switch (target_type.Kind) {
-				case MemberKind.ArrayType:
 				case MemberKind.Class:
+				case MemberKind.Interface:
 					if (target_type.BuiltinType == BuiltinTypeSpec.Type.Object)
 						return EmptyCast.Create (expr, target_type);
 
+					e = ImplicitReferenceConversion (expr, target_type, true, ec, upconvert_only);
+					if (e != null)
+						return e;
+
 					goto case MemberKind.Struct;
+				case MemberKind.ArrayType:
 				case MemberKind.Struct:
 				case MemberKind.Delegate:
 				case MemberKind.Enum:
-				case MemberKind.Interface:
 				case MemberKind.TypeParameter:
 					Arguments args = new Arguments (1);
 					args.Add (new Argument (expr));

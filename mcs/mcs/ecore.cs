@@ -699,7 +699,7 @@ namespace Mono.CSharp {
 			return null;
 		}
 
-		public static MethodSpec ConstructorLookup (ResolveContext rc, TypeSpec type, ref Arguments args, Location loc)
+		public static MethodSpec ConstructorLookup (ResolveContext rc, TypeSpec type, ref Arguments args, Location loc, bool allowDynamicParameters = false)
 		{
 			var ctors = MemberCache.FindMembers (type, Constructor.ConstructorName, true);
 			if (ctors == null) {
@@ -716,6 +716,7 @@ namespace Mono.CSharp {
 			}
 
 			var r = new OverloadResolver (ctors, OverloadResolver.Restrictions.NoBaseMembers, loc);
+			r.AllowDynamicParameters = allowDynamicParameters;
 			if (!rc.HasSet (ResolveContext.Options.BaseInitializer)) {
 				r.InstanceQualifier = new ConstructorInstanceQualifier (type);
 			}
@@ -4030,6 +4031,8 @@ namespace Mono.CSharp {
 			}
 		}
 
+		public bool AllowDynamicParameters { get; set; }
+
 		public bool BestCandidateIsDynamic { get; set; }
 
 		//
@@ -4831,8 +4834,11 @@ namespace Mono.CSharp {
 			//
 			// Restore original arguments for dynamic binder to keep the intention of original source code
 			//
-			if (dynamicArgument)
-				arguments = orig_args;
+			if (dynamicArgument) {
+				if (!this.AllowDynamicParameters) {
+					arguments = orig_args;
+				}
+			}
 
 			return 0;
 		}
@@ -5210,7 +5216,12 @@ namespace Mono.CSharp {
 				}
 
 				BestCandidateIsDynamic = true;
-				return null;
+
+				if (!AllowDynamicParameters || ambiguous_candidates != null)
+				{
+					// if there is any ambiguity then fail to resolve method, else use it
+					return null;
+				}
 			}
 
 			//
@@ -5255,7 +5266,7 @@ namespace Mono.CSharp {
 			// necessary etc. and return if everything is
 			// all right
 			//
-			if (!VerifyArguments (rc, ref best_candidate_args, best_candidate, best_parameter_member, best_candidate_params))
+			if (!VerifyArguments (rc, ref best_candidate_args, best_candidate, best_parameter_member, best_candidate_params, AllowDynamicParameters))
 				return null;
 
 			if (best_candidate == null)
@@ -5397,7 +5408,7 @@ namespace Mono.CSharp {
 						}
 					}
 
-					VerifyArguments (rc, ref args, best_candidate, pm, params_expanded);
+					VerifyArguments (rc, ref args, best_candidate, pm, params_expanded, AllowDynamicParameters);
 					return;
 				}
 			}
@@ -5423,7 +5434,7 @@ namespace Mono.CSharp {
 			}
 		}
 
-		bool VerifyArguments (ResolveContext ec, ref Arguments args, MemberSpec member, IParametersMember pm, bool chose_params_expanded)
+		bool VerifyArguments (ResolveContext ec, ref Arguments args, MemberSpec member, IParametersMember pm, bool chose_params_expanded, bool convert_dynamic_parameters)
 		{
 			var pd = pm.Parameters;
 			TypeSpec[] ptypes = ((IParametersMember) member).Parameters.Types;
@@ -5490,8 +5501,9 @@ namespace Mono.CSharp {
 							na.Name);
 					}
 				}
-				
-				if (a.Expr.Type.BuiltinType == BuiltinTypeSpec.Type.Dynamic)
+
+				// allow implicit conversions to occur for dynamic types
+				if (a.Expr.Type.BuiltinType == BuiltinTypeSpec.Type.Dynamic && !convert_dynamic_parameters)
 					continue;
 
 				if ((restrictions & Restrictions.CovariantDelegate) != 0 && !Delegate.IsTypeCovariant (ec, a.Expr.Type, pt)) {
